@@ -376,6 +376,25 @@ JVM unit tests use no Android classes. They use their own fixtures, not
 | Karoo keeps `startView` running while the page is off-screen | Frames are still at most one per 5 s and skipped when unchanged. |
 | Real noise is above 0.8 m | Widen `SMOOTH_HALF_WINDOW_M`. |
 
+### Probe results (2026-10-12, Karoo 2, Android 8.1)
+
+- `PRESSURE_ELEVATION_CORRECTION` fields: `FIELD_PRESSURE_ELEVATION_ID` only, at about 1 Hz.
+  - Altitude plausible: yes. Readings were 208.4–209.4 m. Karoo's own
+    `ElevationOffset` model showed `pressureElevationFix` 179.4 m +
+    `lastCorrection` 30.2 m ≈ 209.6 m, and network-known elevations nearby are
+    208–210 m. The field is the corrected altitude.
+- Stationary noise: 0.08 m per sample (SD 0.20 m over 66 s). The value changes
+  in small held steps, so the smoothing half-window stays at 25 m.
+  - Measured while the Karoo was not recording; a recording ride wasn't captured.
+- `DISTANCE` / `ELEVATION_GAIN` keys: not captured. No ride recorded during the
+  probe (Karoo's log stayed `NOT_RECORDING`), so neither stream emitted.
+  - The repo reads the documented keys with `SINGLE` as the fallback, and the
+    Task 6/7 device checks confirm them.
+- `ActiveRideProfile` ids: not captured; no event arrived during the probe
+  window. The field's "view is running" safety net covers placement, and Task 6
+  checks the event.
+- Decision: proceed as written.
+
 ## 10. Documentation
 
 - **README:** a section on the elevation history field (what it shows, adding it
