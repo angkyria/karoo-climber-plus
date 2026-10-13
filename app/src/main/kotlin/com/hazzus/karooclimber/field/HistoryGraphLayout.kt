@@ -36,8 +36,12 @@ data class HistoryFrame(
     val graphBottom: Int,
     /** Empty-state line: the edge of the plot's bottom margin. */
     val baselineY: Int,
-    /** Top y of pixel column i, which spans [graphLeft + i, graphLeft + i + 1). */
-    val columnTops: List<Int>,
+    /**
+     * Top y of pixel column i, which spans [graphLeft + i, graphLeft + i + 1), in
+     * quarter pixels: the renderer joins them into one antialiased outline, so a
+     * steady slope draws as a straight line instead of whole-pixel steps.
+     */
+    val columnTops: List<Float>,
     val columnColors: List<Int>,
     /** The newest point; null while there is nothing to draw. */
     val marker: Point?,
@@ -74,6 +78,9 @@ object HistoryGraphLayout {
     private const val BOTTOM_MARGIN = 0.10
     private const val TOP_HEADROOM = 0.06
     private const val MAX_RULES = 5
+
+    /** Column tops per pixel: fine enough for a smooth outline, coarse enough that frames still repeat. */
+    private const val SUBPIXELS = 4
     private val GRID_STEPS = doubleArrayOf(0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0)
 
     fun fits(width: Int, height: Int): FieldFit {
@@ -220,8 +227,8 @@ object HistoryGraphLayout {
         val (x0, x1) = xRange(s)
         val (y0, y1) = yRange(s)
         fun xOf(distance: Double): Int = (left + (distance - x0) / (x1 - x0) * columnCount).roundToInt()
-        fun yOf(elevation: Double): Int =
-            (plotBottom - (elevation - y0) / (y1 - y0) * (plotBottom - plotTop)).roundToInt()
+        fun yAt(elevation: Double): Double = plotBottom - (elevation - y0) / (y1 - y0) * (plotBottom - plotTop)
+        fun yOf(elevation: Double): Int = yAt(elevation).roundToInt()
 
         val columns = columns(s, columnCount)
         val unit = if (imperial) METERS_PER_MILE else 1000.0
@@ -229,7 +236,7 @@ object HistoryGraphLayout {
         val maxY = yOf(s.maxElevation)
         val minY = yOf(s.minElevation)
         return empty.copy(
-            columnTops = columns.map { yOf(it.peak) },
+            columnTops = columns.map { (yAt(it.peak) * SUBPIXELS).roundToInt() / SUBPIXELS.toFloat() },
             columnColors = columns.map { if (it.grade.isNaN()) NO_GRADE_COLOR else palette.chunkColor(it.grade) },
             marker = HistoryFrame.Point(xOf(s.newest), yOf(s.smoothed[s.size - 1])),
             rules = gridRules(x0, x1, step).map { HistoryFrame.Rule(xOf(it), gridLabel(it, step, unit)) },

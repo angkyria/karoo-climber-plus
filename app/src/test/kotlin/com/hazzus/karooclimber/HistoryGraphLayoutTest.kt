@@ -194,6 +194,15 @@ class HistoryGraphLayoutTest {
     }
 
     @Test
+    fun `column tops follow a steady slope without whole-pixel steps`() {
+        val s = ride(until = 5000.0) { d -> 100.0 + d * 0.05 } // one straight 5 % line
+        val tops = HistoryGraphLayout.frame(480, 220, s, null, karoo, imperial = false).columnTops.map { it.toFloat() }
+        val perColumn = (tops.last() - tops.first()) / (tops.size - 1)
+        // quarter-pixel tops stay within 0.25 px of the line; whole pixels stray up to a full one
+        tops.forEachIndexed { i, top -> assertEquals("column $i", tops.first() + perColumn * i, top, 0.26f) }
+    }
+
+    @Test
     fun `before two points the frame is the empty state`() {
         val h = ElevationHistory()
         h.append(10.0, 412.0)
