@@ -187,6 +187,7 @@ class ClimberExtension : KarooExtension(EXTENSION_ID, BuildConfig.VERSION_NAME) 
             }
                 .distinctUntilChanged()
                 .collect { source ->
+                    Log.i(TAG, "elevation history source=$source (in profile=${fieldInProfile.value})")
                     if (historyGate.switchTo(source)) historyRepo.reset()
                     if (source == HistorySource.RIDE) historyRepo.startStreams() else historyRepo.stopStreams()
                     historySource.value = source
