@@ -81,6 +81,21 @@ Data flows one way: karoo-ext events → repos → pure engine → overlay windo
 - **`palette/GradePalettes`** — band values copied from Barberfish (Apache-2.0,
   attributed in NOTICE); palettes without negative bands fall back to
   `descentColor` for downhill chunks.
+- **Elevation history field** (`field/`, `data/ElevationHistory*`, `data/HistoryGate`):
+  a graphical karoo-ext data field (`ElevationHistoryField`, typeId
+  `elevation-history`, declared in `extension_info.xml`, registered via
+  `ClimberExtension.types`) showing the ride's elevation so far, colored by grade.
+  - Recording: `ElevationHistoryRepo` records `DISTANCE` + `PRESSURE_ELEVATION_CORRECTION`
+    (+ `ELEVATION_GAIN`) only while `HistoryGate` says so: the field is on a page
+    of the active ride profile (`ActiveRideProfile`) or a view is running; in demo
+    mode the demo ticker feeds it instead.
+  - Model: `ElevationHistory` keeps 10 m bin points; `HistorySnapshot` derives the
+    ±25 m smoothing, frozen 100 m grades and min/max lazily.
+  - Drawing: `HistoryGraphLayout` (pure) builds a `HistoryFrame` (steepest chunk per
+    pixel column, tops in quarter pixels), and `HistoryGraphRenderer` paints it as
+    one antialiased outline filled from a one-color-per-column strip.
+- **`ui/`**: unit formatting (`Units.kt`) and the IBM Plex loader (`KarooFonts`),
+  shared by the overlay and the field.
 
 ## Conventions / gotchas
 
@@ -95,3 +110,18 @@ Data flows one way: karoo-ext events → repos → pure engine → overlay windo
 - `ClimbEngineTest` uses its own route fixture on purpose — keep it decoupled from
   `DemoData`, which changes freely for demo UX.
 - Visual/native-design references live in the README screenshot table (`docs/img/`).
+- karoo-ext calls `DataTypeImpl.startView` on a binder thread, and
+  `ViewEmitter.updateView` silently drops a frame sent < 900 ms after the last
+  one. The field paces itself (`FramePacer`: every 5 s, skips identical frames).
+  The drop is only logged through Timber, and the app plants no tree, so it never
+  shows in logcat.
+- Field bitmaps travel through binder: RGB_565, ≤ 300 KB
+  (`HistoryGraphLayout.bitmapScale`). Bigger fields render scaled down and the
+  `ImageView` stretches them.
+- The field sends `UpdateGraphicConfig(showHeader = false)` for page-editor
+  previews too: with Karoo's header left on, the bitmap drawn for the whole
+  `viewSize` is squeezed into the strip under it.
+- Don't draw the history as separate 1 px bars: every slope turns into stair
+  steps, worst where the bitmap is stretched. Keep the single antialiased path.
+- Palette and layout code must stay JVM-safe (no `android.graphics.Color` calls),
+  because the field's layout tests use `GradePalettes` directly.

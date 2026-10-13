@@ -178,7 +178,9 @@ and rendering on `Dispatchers.Default`. Each loop owns its own renderer
     are `NaN`, the column is `NaN`. Examples: [3.1, 9.8, 4.0] → 9.8 and
     [−2, −6, −1] → −6.
   - **Peak.** The highest smoothed elevation inside the column, including the
-    interpolated values at both column edges.
+    interpolated values at both column edges. Its y is kept in quarter pixels,
+    not whole ones, so the outline through the peaks is a straight line on a
+    steady slope (added after the device check, see §6).
 - **Vertical range.** [min, max] of the smoothed points, widened symmetrically
   to at least 20 m. The bottom 10% of the graph is left as a margin, so even
   the lowest column shows its color. The top of the range sits below the values
@@ -209,9 +211,13 @@ and rendering on `Dispatchers.Default`. Each loop owns its own renderer
 
 Agreed on the mockup during brainstorming.
 
-- **Background and columns.** The bitmap is filled black. Each graph pixel gets
-  a 1-px column running from the column's peak down to the graph bottom, colored
-  `palette.chunkColor(grade)`; `NaN` columns are `0xFF4A4A4A`.
+- **Background and shape.** The bitmap is filled black. The ridden shape is one
+  antialiased outline through the column peaks, filled down to the graph bottom
+  with one color per pixel column: `palette.chunkColor(grade)`, or `0xFF4A4A4A`
+  for `NaN` columns.
+  - The first version drew a separate 1-px bar per column. On the device every
+    slope came out as stair steps, most visibly on fields rendered below field
+    size and stretched (§7.2), and the user rejected it ("is not linear").
 - **Grid rules** are drawn first, behind the colors: white at 25% alpha,
   1.5 px wide.
 - **Marker.** A white dot with a black center, as in the overlay. Radius is
@@ -264,11 +270,14 @@ Agreed on the mockup during brainstorming.
 
 ### 7.2 Field view (per `startView`)
 
+- **Header.** Every view, preview or not, first sends
+  `emitter.onNext(UpdateGraphicConfig(showHeader = false))`. With Karoo's own
+  header left on, the bitmap drawn for the whole `viewSize` is squeezed into
+  the strip under it (seen in the picker during the device check).
 - **Preview.** If `config.preview` is set, render the sample once, call
   `updateView` and stop. Preview views don't count as running views, so the
   page editor never starts recording.
 - **Setup.** Otherwise:
-  - send `emitter.onNext(UpdateGraphicConfig(showHeader = false))`
   - register as visible (a counter on Main)
   - launch the loop, whose inputs are the history `version`, the ascent, the
     palette (from settings) and the units

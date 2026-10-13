@@ -69,6 +69,12 @@ Karoo's IBM Plex Sans Condensed font — but goes further where it counts:
 - Metric and imperial units (follows your Karoo rider profile)
 - Overlay position (top/bottom), height and opacity settings
 - **Demo mode**: preview everything on the couch, no route or ride needed
+- **Elevation history data field**: a graphical Karoo data field showing the
+  elevation you've ridden so far on this ride, refitting to the whole ride as
+  it grows and colored by grade with the selected palette. Each pixel column
+  shows the steepest 100 m chunk it covers, so short ramps stay visible on long
+  rides. Current elevation and ascent sit on top, with min/max labels and a
+  distance grid when the field is big enough. Works with or without a route
 
 ### Gestures
 
@@ -129,6 +135,9 @@ Open the Climber+ app on the Karoo:
 - **Full-screen view fields**: pick the four data fields from a categorized
   menu — climb metrics, any Karoo data stream, and Ki2 (Di2) fields
 - **Debug**: demo mode with a canned two-climb route
+- **Elevation history field**: in Karoo's page editor, add *Elevation history*
+  from the Climber+ category to any ride page. It uses the palette chosen here
+  and records only while it's on a page of the active ride profile
 
 ## Building
 
@@ -170,6 +179,10 @@ repo secrets `KEYSTORE_BASE64` (`base64 -i` of the `.jks`),
   extension's foreground service.
 - Rendering is a plain `Canvas` view with per-climb caching — cheap enough for
   the Karoo 2.
+- The elevation history records the `DISTANCE` and barometric elevation
+  (`PRESSURE_ELEVATION_CORRECTION`) streams while the field is placed, smooths
+  them over ±25 m and grades fixed 100 m chunks. It's drawn into a bitmap and
+  sent through karoo-ext's `RemoteViews` at most every 5 s.
 
 ### Limitations
 
@@ -180,6 +193,7 @@ repo secrets `KEYSTORE_BASE64` (`base64 -i` of the `.jks`),
 - System data fields show `--` until their stream produces values (in-ride).
 - Ki2 (Di2) fields need the [Ki2](https://github.com/valterc/ki2) extension
   installed and the shifters paired/awake.
+- The elevation history starts over if the extension restarts mid-ride.
 
 ## Credits
 
