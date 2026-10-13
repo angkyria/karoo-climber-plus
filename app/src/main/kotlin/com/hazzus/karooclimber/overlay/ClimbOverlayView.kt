@@ -7,7 +7,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
-import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.view.GestureDetector
 import android.view.KeyCharacterMap
@@ -27,6 +26,11 @@ import com.hazzus.karooclimber.settings.ClimbField
 import com.hazzus.karooclimber.settings.FieldFormat
 import com.hazzus.karooclimber.settings.OverlayAnchor
 import com.hazzus.karooclimber.settings.Settings
+import com.hazzus.karooclimber.ui.KarooFonts
+import com.hazzus.karooclimber.ui.distanceText
+import com.hazzus.karooclimber.ui.distanceWithUnitText
+import com.hazzus.karooclimber.ui.elevationText
+import com.hazzus.karooclimber.ui.kmText
 import io.hammerhead.karooext.models.DataType
 import java.util.Calendar
 import kotlin.math.abs
@@ -305,13 +309,6 @@ class ClimbOverlayView(context: Context) : View(context) {
 
     // ---------------------------------------------------------------- drawing
 
-    // Karoo's native data-field font (IBM Plex Sans Condensed, shipped in
-    // /system/fonts), used for all overlay text at its single Medium weight.
-    // Null on other devices -> Paint falls back to the default typeface.
-    private val plexCondensed: Typeface? = runCatching {
-        Typeface.createFromFile("/system/fonts/IBMPlexSansCondensed-Medium.otf")
-    }.getOrNull()
-
     private val panelBgPaint = Paint().apply { color = Color.BLACK }
     private val approachBgPaint = Paint().apply { color = 0xFF383838.toInt() }
     private val chipBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xF0121212.toInt() }
@@ -323,19 +320,19 @@ class ClimbOverlayView(context: Context) : View(context) {
     private val markerCenterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        typeface = plexCondensed
+        typeface = KarooFonts.plexCondensed
     }
     private val subTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFDCE8F5.toInt()
-        typeface = plexCondensed
+        typeface = KarooFonts.plexCondensed
     }
     private val rowTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFF111111.toInt()
-        typeface = plexCondensed
+        typeface = KarooFonts.plexCondensed
     }
     private val chipTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        typeface = plexCondensed
+        typeface = KarooFonts.plexCondensed
     }
     private val splicePaint = Paint().apply {
         color = 0x40000000
@@ -349,7 +346,7 @@ class ClimbOverlayView(context: Context) : View(context) {
     // momentary view-mode banner, drawn large straight over the profile (see drawModeFlash)
     private val flashTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        typeface = plexCondensed
+        typeface = KarooFonts.plexCondensed
         textAlign = Paint.Align.CENTER
     }
 
@@ -651,11 +648,7 @@ class ClimbOverlayView(context: Context) : View(context) {
 
         var x = area.left
         for (chunk in chunks) {
-            rowPaint.color = if (chunk.grade < 0 && palette.bands.last().first >= 0.0) {
-                GradePalettes.descentColor
-            } else {
-                palette.colorFor(chunk.grade)
-            }
+            rowPaint.color = palette.chunkColor(chunk.grade)
             val cell = RectF(x, area.top, x + cellW, area.bottom - area.height() * 0.08f)
             canvas.drawRoundRect(cell, CELL_CORNER / 2f, CELL_CORNER / 2f, rowPaint)
             canvas.drawText(
@@ -788,11 +781,7 @@ class ClimbOverlayView(context: Context) : View(context) {
         canvas.clipPath(profilePath)
         for (seg in cacheSegments) {
             if (seg.end < winStart || seg.start > winEnd) continue
-            fillPaint.color = if (seg.grade < 0 && palette.bands.last().first >= 0.0) {
-                GradePalettes.descentColor
-            } else {
-                palette.colorFor(seg.grade)
-            }
+            fillPaint.color = palette.chunkColor(seg.grade)
             canvas.drawRect(xOf(seg.start), chart.top, xOf(seg.end), chart.bottom, fillPaint)
         }
         if (s.progress > winStart) {
@@ -1092,32 +1081,18 @@ class ClimbOverlayView(context: Context) : View(context) {
     }
 
     // ------------------------------------------------------------------ units
+    // Shared with the elevation history field (ui/Units.kt), bound to this view's units.
 
-    private fun formatDistance(meters: Double): String = if (imperial) {
-        val miles = meters / 1609.344
-        if (miles < 0.1) "${(meters * 3.28084).toInt()} ft" else "%.1f mi".format(miles)
-    } else {
-        if (meters < 1000) "${meters.toInt()} m" else "%.1f km".format(meters / 1000.0)
-    }
-
-    private fun formatElevation(meters: Double): String =
-        if (imperial) "${(meters * 3.28084).toInt()} ft" else "${meters.toInt()} m"
+    private fun formatDistance(meters: Double): String = distanceWithUnitText(meters, imperial)
 
     /** Unitless distance value (m under 1 km, km with one decimal above; mi imperial). */
-    private fun formatValue(meters: Double): String = if (imperial) {
-        val miles = meters / 1609.344
-        if (miles < 0.1) "${(meters * 3.28084).toInt()}" else "%.1f".format(miles)
-    } else {
-        if (meters < 1000) "${meters.toInt()}" else "%.1f".format(meters / 1000.0)
-    }
+    private fun formatValue(meters: Double): String = distanceText(meters, imperial)
 
     /** Unitless elevation value. */
-    private fun formatElevationValue(meters: Double): String =
-        if (imperial) "${(meters * 3.28084).toInt()}" else "${meters.toInt()}"
+    private fun formatElevationValue(meters: Double): String = elevationText(meters, imperial)
 
     /** Always km (or mi), one decimal: 700 m -> "0.7". */
-    private fun formatKm(meters: Double): String =
-        "%.1f".format(if (imperial) meters / 1609.344 else meters / 1000.0)
+    private fun formatKm(meters: Double): String = kmText(meters, imperial)
 
     companion object {
         /** Chip text size and side padding, both as a fraction of chip height. */

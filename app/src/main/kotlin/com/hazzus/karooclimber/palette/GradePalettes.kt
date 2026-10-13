@@ -1,7 +1,5 @@
 package com.hazzus.karooclimber.palette
 
-import android.graphics.Color
-
 /**
  * Grade → color band palettes.
  *
@@ -16,6 +14,14 @@ data class GradePalette(
 ) {
     fun colorFor(grade: Double): Int =
         bands.firstOrNull { grade >= it.first }?.second ?: bands.last().second
+
+    /**
+     * Color of a grade chunk (climb profile, chunk strip, elevation history):
+     * downhill chunks fall back to [GradePalettes.descentColor] when the palette
+     * has no negative bands.
+     */
+    fun chunkColor(grade: Double): Int =
+        if (grade < 0 && bands.last().first >= 0.0) GradePalettes.descentColor else colorFor(grade)
 }
 
 object GradePalettes {
@@ -98,6 +104,9 @@ object GradePalettes {
 
     fun byId(id: String): GradePalette = all.firstOrNull { it.id == id } ?: KAROO
 
-    /** Fallback for flat/descending stretches in palettes without negative bands. */
-    val descentColor: Int = Color.rgb(0x50, 0x78, 0x96)
+    /**
+     * Fallback for descending stretches in palettes without negative bands:
+     * rgb(0x50, 0x78, 0x96), a plain literal so palette code runs in JVM tests.
+     */
+    val descentColor: Int = 0xFF507896.toInt()
 }
