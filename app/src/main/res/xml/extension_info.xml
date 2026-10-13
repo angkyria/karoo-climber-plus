@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Overlay-only extension: no datatypes, no scanning, no map layer in v1 -->
+<!-- Overlay extension plus one graphical data field (elevation history); no
+     scanning, no map layer. typeId must match ElevationHistoryField.TYPE_ID. -->
 <ExtensionInfo
     displayName="@string/extension_name"
     icon="@drawable/ic_climber"
-    id="karoo-climber" />
+    id="karoo-climber">
+
+    <DataType
+        description="@string/elevation_history_description"
+        displayName="@string/elevation_history_name"
+        graphical="true"
+        icon="@drawable/ic_elevation"
+        typeId="elevation-history" />
+</ExtensionInfo>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Elevation history field: one bitmap drawn by HistoryGraphRenderer, stretched
+     to the field when it was rendered below field size (IPC budget). -->
+<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/graph"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:contentDescription="@string/elevation_history_name"
+    android:scaleType="fitXY" />

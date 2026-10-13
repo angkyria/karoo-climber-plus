@@ -3,15 +3,21 @@ package com.hazzus.karooclimber
 import android.util.Log
 import com.hazzus.karooclimber.data.ClimbEngine
 import com.hazzus.karooclimber.data.ClimbUiState
+import com.hazzus.karooclimber.data.ElevationHistoryRepo
+import com.hazzus.karooclimber.data.HistoryGate
+import com.hazzus.karooclimber.data.HistorySource
 import com.hazzus.karooclimber.data.NavigationRepo
 import com.hazzus.karooclimber.data.ProgressRepo
 import com.hazzus.karooclimber.data.progressAlongRoute
 import com.hazzus.karooclimber.debug.DemoData
+import com.hazzus.karooclimber.field.ElevationHistoryField
 import com.hazzus.karooclimber.overlay.OverlayController
 import com.hazzus.karooclimber.settings.Settings
 import com.hazzus.karooclimber.settings.SettingsRepo
 import io.hammerhead.karooext.KarooSystemService
+import io.hammerhead.karooext.extension.DataTypeImpl
 import io.hammerhead.karooext.extension.KarooExtension
+import io.hammerhead.karooext.models.ActiveRideProfile
 import io.hammerhead.karooext.models.OnStreamState
 import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.StreamState
@@ -30,9 +36,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Extension service bound by Karoo OS. Hosts the KarooSystemService connection,
- * the data layer and the overlay controller.
+ * the data layer, the overlay controller and the elevation history field.
  */
-class ClimberExtension : KarooExtension("karoo-climber", BuildConfig.VERSION_NAME) {
+class ClimberExtension : KarooExtension(EXTENSION_ID, BuildConfig.VERSION_NAME) {
 
     lateinit var karooSystem: KarooSystemService
         private set
@@ -42,17 +48,27 @@ class ClimberExtension : KarooExtension("karoo-climber", BuildConfig.VERSION_NAM
     private lateinit var navigationRepo: NavigationRepo
     private lateinit var progressRepo: ProgressRepo
     private lateinit var settingsRepo: SettingsRepo
+    private lateinit var historyRepo: ElevationHistoryRepo
+    private lateinit var historyField: ElevationHistoryField
     private lateinit var overlay: OverlayController
     private val engine = ClimbEngine()
+    private val historyGate = HistoryGate()
 
     private val rideActive = MutableStateFlow(false)
     private val imperial = MutableStateFlow(false)
     private val demoProgress = MutableStateFlow(0.0)
     private val consumerIds = mutableListOf<String>()
 
+    /** The elevation history field sits on a page of the active ride profile. */
+    private val fieldInProfile = MutableStateFlow(false)
+    private val historySource = MutableStateFlow(HistorySource.NONE)
+    private val demoProfile by lazy { DemoData.route().profile }
+
     /** Latest field values of streamed system data types (keyed by dataTypeId). */
     private val sysValues = MutableStateFlow<Map<String, Map<String, Double>>>(emptyMap())
     private val sysConsumers = mutableMapOf<String, String>() // dataTypeId -> consumerId
+
+    override val types: List<DataTypeImpl> by lazy { listOf(historyField) }
 
     override fun onCreate() {
         super.onCreate()
@@ -60,6 +76,8 @@ class ClimberExtension : KarooExtension("karoo-climber", BuildConfig.VERSION_NAM
         navigationRepo = NavigationRepo(karooSystem)
         progressRepo = ProgressRepo(karooSystem)
         settingsRepo = SettingsRepo(applicationContext)
+        historyRepo = ElevationHistoryRepo(karooSystem)
+        historyField = ElevationHistoryField(scope, historyRepo, settingsRepo.settings, imperial)
         overlay = OverlayController(this)
 
         karooSystem.connect { connected ->
@@ -69,13 +87,22 @@ class ClimberExtension : KarooExtension("karoo-climber", BuildConfig.VERSION_NAM
 
         consumerIds += karooSystem.addConsumer<RideState> { state ->
             val active = state is RideState.Recording || state is RideState.Paused
-            // ride ended: forget completed climbs so re-riding the route starts at 0/N
-            if (!active && rideActive.value) engine.reset()
+            // ride ended: forget completed climbs so re-riding the route starts at 0/N,
+            // and start the next ride's elevation history from scratch
+            if (!active && rideActive.value) {
+                engine.reset()
+                historyRepo.reset()
+            }
             rideActive.value = active
         }
         consumerIds += karooSystem.addConsumer<UserProfile> { profile ->
             imperial.value =
                 profile.preferredUnit.distance == UserProfile.PreferredUnit.UnitType.IMPERIAL
+        }
+        consumerIds += karooSystem.addConsumer<ActiveRideProfile> { event ->
+            fieldInProfile.value = event.profile.pages.any { page ->
+                page.elements.any { it.dataTypeId == ElevationHistoryField.DATA_TYPE_ID }
+            }
         }
 
         // The DISTANCE_TO_DESTINATION stream (~1 Hz for a whole ride) is only read
@@ -147,6 +174,35 @@ class ClimberExtension : KarooExtension("karoo-climber", BuildConfig.VERSION_NAM
                     }
                 }
         }
+
+        // Elevation history (spec §7.1): record while the field is placed, from the
+        // demo feed in demo mode or the ride's streams otherwise; switching between
+        // the two never continues the other's history.
+        scope.launch {
+            val placed = combine(fieldInProfile, historyField.runningViews) { inProfile, views ->
+                inProfile || views > 0
+            }
+            combine(placed, rideActive, settingsRepo.settings.map { it.demoMode }) { isPlaced, riding, demo ->
+                HistoryGate.sourceFor(isPlaced, riding, demo)
+            }
+                .distinctUntilChanged()
+                .collect { source ->
+                    if (historyGate.switchTo(source)) historyRepo.reset()
+                    if (source == HistorySource.RIDE) historyRepo.startStreams() else historyRepo.stopStreams()
+                    historySource.value = source
+                }
+        }
+
+        // Demo mode feeds the history from the canned route; the loop wrapping back
+        // to 0 m starts it over (ElevationHistory's distance-drop rule).
+        scope.launch {
+            demoProgress.collect { at ->
+                val profile = demoProfile
+                if (historySource.value == HistorySource.DEMO && profile != null) {
+                    historyRepo.appendDemo(at, profile.elevationAt(at))
+                }
+            }
+        }
     }
 
     private fun computeState(
@@ -195,12 +251,15 @@ class ClimberExtension : KarooExtension("karoo-climber", BuildConfig.VERSION_NAM
         sysConsumers.values.forEach { karooSystem.removeConsumer(it) }
         navigationRepo.stop()
         progressRepo.stop()
+        historyRepo.stopStreams()
         scope.cancel()
         karooSystem.disconnect()
         super.onDestroy()
     }
 
     companion object {
+        /** Must match extension_info.xml's id. */
+        const val EXTENSION_ID = "karoo-climber"
         private const val TAG = "ClimberExtension"
         private const val DEMO_SPEED_MPS = 15.0
     }

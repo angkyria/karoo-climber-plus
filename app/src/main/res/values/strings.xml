@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Climber+</string>
     <string name="extension_name">Climber+</string>
+    <string name="elevation_history_name">Elevation history</string>
+    <string name="elevation_history_description">Elevation ridden so far, colored by grade</string>
 </resources>
