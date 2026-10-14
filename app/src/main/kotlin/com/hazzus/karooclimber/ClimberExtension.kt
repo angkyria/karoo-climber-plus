@@ -6,6 +6,7 @@ import com.hazzus.karooclimber.data.ClimbUiState
 import com.hazzus.karooclimber.data.ElevationHistoryRepo
 import com.hazzus.karooclimber.data.HistoryGate
 import com.hazzus.karooclimber.data.HistorySource
+import com.hazzus.karooclimber.data.HistoryStreams
 import com.hazzus.karooclimber.data.NavigationRepo
 import com.hazzus.karooclimber.data.ProgressRepo
 import com.hazzus.karooclimber.data.progressAlongRoute
@@ -77,7 +78,7 @@ class ClimberExtension : KarooExtension(EXTENSION_ID, BuildConfig.VERSION_NAME) 
         progressRepo = ProgressRepo(karooSystem)
         settingsRepo = SettingsRepo(applicationContext)
         historyRepo = ElevationHistoryRepo(karooSystem)
-        historyField = ElevationHistoryField(scope, historyRepo, settingsRepo.settings, imperial)
+        historyField = ElevationHistoryField(scope, historyRepo, settingsRepo.settings, imperial, historySource)
         overlay = OverlayController(this)
 
         karooSystem.connect { connected ->
@@ -177,19 +178,26 @@ class ClimberExtension : KarooExtension(EXTENSION_ID, BuildConfig.VERSION_NAME) 
 
         // Elevation history (spec §7.1): record while the field is placed, from the
         // demo feed in demo mode or the ride's streams otherwise; switching between
-        // the two never continues the other's history.
+        // the two never continues the other's history. Before the ride, a field on
+        // screen streams only the elevation, to show it.
         scope.launch {
             val placed = combine(fieldInProfile, historyField.runningViews) { inProfile, views ->
                 inProfile || views > 0
             }
-            combine(placed, rideActive, settingsRepo.settings.map { it.demoMode }) { isPlaced, riding, demo ->
-                HistoryGate.sourceFor(isPlaced, riding, demo)
+            combine(
+                placed,
+                rideActive,
+                settingsRepo.settings.map { it.demoMode },
+                historyField.runningViews,
+            ) { isPlaced, riding, demo, views ->
+                val source = HistoryGate.sourceFor(isPlaced, riding, demo)
+                source to HistoryGate.streamsFor(source, viewRunning = views > 0)
             }
                 .distinctUntilChanged()
-                .collect { source ->
-                    Log.i(TAG, "elevation history source=$source (in profile=${fieldInProfile.value})")
+                .collect { (source, streams) ->
+                    Log.i(TAG, "elevation history source=$source streams=$streams (in profile=${fieldInProfile.value})")
                     if (historyGate.switchTo(source)) historyRepo.reset()
-                    if (source == HistorySource.RIDE) historyRepo.startStreams() else historyRepo.stopStreams()
+                    historyRepo.setStreams(streams)
                     historySource.value = source
                 }
         }
@@ -252,7 +260,7 @@ class ClimberExtension : KarooExtension(EXTENSION_ID, BuildConfig.VERSION_NAME) 
         sysConsumers.values.forEach { karooSystem.removeConsumer(it) }
         navigationRepo.stop()
         progressRepo.stop()
-        historyRepo.stopStreams()
+        historyRepo.setStreams(HistoryStreams.NONE)
         scope.cancel()
         karooSystem.disconnect()
         super.onDestroy()

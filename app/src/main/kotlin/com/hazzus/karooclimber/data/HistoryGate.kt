@@ -3,6 +3,9 @@ package com.hazzus.karooclimber.data
 /** Where the elevation history's samples come from right now. */
 enum class HistorySource { NONE, RIDE, DEMO }
 
+/** Which Karoo streams the history needs: none, the elevation alone (empty field on screen), or a ride's. */
+enum class HistoryStreams { NONE, ELEVATION, RIDE }
+
 /**
  * Recording gate for the elevation history (spec §7.1): record only while the
  * field is placed (the demo feed in demo mode, a running ride otherwise), and
@@ -25,6 +28,17 @@ class HistoryGate {
             demoMode -> HistorySource.DEMO
             rideActive -> HistorySource.RIDE
             else -> HistorySource.NONE
+        }
+
+        /**
+         * A ride records distance, elevation and ascent. Before the ride, a field on
+         * screen still shows the current elevation, so it streams that alone; the
+         * demo feed needs nothing from Karoo.
+         */
+        fun streamsFor(source: HistorySource, viewRunning: Boolean): HistoryStreams = when {
+            source == HistorySource.RIDE -> HistoryStreams.RIDE
+            source == HistorySource.NONE && viewRunning -> HistoryStreams.ELEVATION
+            else -> HistoryStreams.NONE
         }
     }
 }

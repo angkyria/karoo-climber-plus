@@ -241,7 +241,12 @@ Agreed on the mockup during brainstorming.
   default typeface.
 - **Units.** Elevations in m/ft and distances in km/mi, unitless, via
   `ui/Units.kt`.
-- **Empty state** (fewer than 2 points): `--` values and a faint baseline.
+- **Empty state** (fewer than 2 points): a faint baseline. The current
+  elevation falls back to the live barometric elevation when there is one,
+  otherwise `--`; ascent `--` until the ride reports it.
+  - Before the ride (source NONE) the plot also shows `STARTS WHEN YOU RIDE`,
+    centered, in the distance-label style. Added on 2026-10-14 after the user
+    read the bare empty field as broken.
 - **Preview** (`ViewConfig.preview`): the full `DemoData` route, drawn once as a
   static sample.
 
@@ -259,6 +264,10 @@ Agreed on the mockup during brainstorming.
   - On each `DISTANCE` value, if an elevation is known,
     `history.append(distance, elevation)` runs.
   - `ELEVATION_GAIN` supplies the ascent.
+- **Before the ride.** When no source records but a field view is on screen,
+  only `PRESSURE_ELEVATION_CORRECTION` streams, so the empty field can show the
+  current elevation. Nothing is recorded. (`HistoryGate.streamsFor`: RIDE →
+  all three streams, NONE with a view → elevation only, otherwise none.)
 - **Demo data.** When `demoMode && fieldPlaced` holds, each demo tick appends
   `(demoProgress, DemoData.route().profile.elevationAt(demoProgress))`, and
   the ascent is `climbed`. When the demo loop wraps back to 0, the reset rule in

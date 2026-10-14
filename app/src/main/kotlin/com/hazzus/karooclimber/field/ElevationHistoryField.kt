@@ -9,6 +9,7 @@ import com.hazzus.karooclimber.R
 import com.hazzus.karooclimber.data.ElevationHistory
 import com.hazzus.karooclimber.data.ElevationHistoryRepo
 import com.hazzus.karooclimber.data.HistorySnapshot
+import com.hazzus.karooclimber.data.HistorySource
 import com.hazzus.karooclimber.debug.DemoData
 import com.hazzus.karooclimber.palette.GradePalettes
 import com.hazzus.karooclimber.settings.Settings
@@ -44,6 +45,8 @@ class ElevationHistoryField(
     private val repo: ElevationHistoryRepo,
     private val settings: Flow<Settings>,
     private val imperial: StateFlow<Boolean>,
+    /** Where the history records from; NONE before the ride, when an empty field shows a hint. */
+    private val source: StateFlow<HistorySource>,
 ) : DataTypeImpl(ClimberExtension.EXTENSION_ID, TYPE_ID) {
 
     private val _runningViews = MutableStateFlow(0)
@@ -97,16 +100,21 @@ class ElevationHistoryField(
         val renderer = HistoryGraphRenderer(context)
         val pacer = FramePacer(FRAME_INTERVAL_MS)
         val scale = HistoryGraphLayout.bitmapScale(width, height)
-        combine(repo.version, settings, imperial) { _, s, units -> s.paletteId to units }
+        combine(repo.version, settings, imperial, source) { _, s, units, src ->
+            Triple(s.paletteId, units, src == HistorySource.NONE)
+        }
             .conflate()
-            .collect { (paletteId, units) ->
+            .collect { (paletteId, units, waitingForRide) ->
                 delay(pacer.waitMs())
                 val snapshot = repo.snapshot() // main thread: the history lives here
                 val ascent = repo.ascent.value
+                val liveElevation = repo.liveElevation.value
                 withContext(Dispatchers.Default) {
                     try {
                         val frame = HistoryGraphLayout.frame(
                             width, height, snapshot, ascent, GradePalettes.byId(paletteId), units,
+                            liveElevation = liveElevation,
+                            waitingForRide = waitingForRide,
                         )
                         if (pacer.isNew(frame)) {
                             emitter.updateView(remoteViews(context, renderer.render(frame, scale)))

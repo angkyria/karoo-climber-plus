@@ -124,6 +124,12 @@ class HistoryGraphRenderer(context: Context) {
             labelPaint.color = DISTANCE_LABEL_COLOR
             for (rule in f.rules) canvas.drawText(rule.text, rule.x + 3f, f.graphBottom - 4f, labelPaint)
         }
+        f.hint?.let { hint ->
+            labelPaint.color = DISTANCE_LABEL_COLOR
+            labelPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(hint.text, f.width / 2f, hint.y + baselineOffset, labelPaint)
+            labelPaint.textAlign = Paint.Align.LEFT
+        }
     }
 
     /** Current elevation (left) and ascent (right) over the top of the graph, with glyphs. */

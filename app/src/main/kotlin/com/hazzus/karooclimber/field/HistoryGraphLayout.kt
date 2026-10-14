@@ -52,6 +52,8 @@ data class HistoryFrame(
     val labelTextSize: Float,
     val currentText: String,
     val ascentText: String,
+    /** Centered in the plot while an empty field waits for the ride to start. */
+    val hint: Label? = null,
 ) {
     data class Point(val x: Int, val y: Int)
     data class Rule(val x: Int, val text: String)
@@ -74,6 +76,9 @@ object HistoryGraphLayout {
 
     /** Columns without a grade yet. */
     val NO_GRADE_COLOR: Int = 0xFF4A4A4A.toInt()
+
+    /** Before the ride an empty field says why it's empty, instead of reading as broken. */
+    const val WAITING_HINT = "STARTS WHEN YOU RIDE"
 
     private const val BOTTOM_MARGIN = 0.10
     private const val TOP_HEADROOM = 0.06
@@ -182,6 +187,10 @@ object HistoryGraphLayout {
         return if (bytes <= BITMAP_BUDGET_BYTES) 1f else sqrt(BITMAP_BUDGET_BYTES.toDouble() / bytes).toFloat()
     }
 
+    /**
+     * [liveElevation] stands in for the current elevation until the history has a
+     * sample; [waitingForRide] adds [WAITING_HINT] to a field with nothing to draw.
+     */
     fun frame(
         width: Int,
         height: Int,
@@ -189,6 +198,8 @@ object HistoryGraphLayout {
         ascent: Double?,
         palette: GradePalette,
         imperial: Boolean,
+        liveElevation: Double? = null,
+        waitingForRide: Boolean = false,
     ): HistoryFrame {
         val w = max(width, 1)
         val h = max(height, 1)
@@ -219,8 +230,13 @@ object HistoryGraphLayout {
             maxLabel = null,
             minLabel = null,
             labelTextSize = labelTextSize,
-            currentText = s.current?.let { elevationText(it, imperial) } ?: "--",
+            currentText = (s.current ?: liveElevation)?.let { elevationText(it, imperial) } ?: "--",
             ascentText = ascent?.let { elevationText(it, imperial) } ?: "--",
+            hint = if (waitingForRide && s.size < 2) {
+                HistoryFrame.Label(((plotTop + plotBottom) / 2).roundToInt(), WAITING_HINT)
+            } else {
+                null
+            },
         )
         if (s.size < 2) return empty
 

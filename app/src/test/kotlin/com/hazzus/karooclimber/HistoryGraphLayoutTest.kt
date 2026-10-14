@@ -214,6 +214,39 @@ class HistoryGraphLayoutTest {
     }
 
     @Test
+    fun `before a ride the empty field shows a hint and the live elevation`() {
+        val f = HistoryGraphLayout.frame(
+            480, 220, ElevationHistory().snapshot(), null, karoo, imperial = false,
+            liveElevation = 209.4, waitingForRide = true,
+        )
+        assertEquals(HistoryGraphLayout.WAITING_HINT, f.hint?.text)
+        assertTrue("hint at ${f.hint?.y}", f.hint!!.y > f.graphTop + f.fit.valuesRow && f.hint!!.y < f.baselineY)
+        assertEquals("209", f.currentText)
+        assertEquals("--", f.ascentText)
+    }
+
+    @Test
+    fun `recorded points replace the hint and the live elevation`() {
+        val s = ride(until = 500.0) { 300.0 }
+        val f = HistoryGraphLayout.frame(
+            480, 220, s, null, karoo, imperial = false, liveElevation = 209.4, waitingForRide = true,
+        )
+        assertNull(f.hint)
+        assertEquals("300", f.currentText)
+    }
+
+    @Test
+    fun `a recording ride that has not moved yet shows the live elevation without a hint`() {
+        val f = HistoryGraphLayout.frame(
+            480, 220, ElevationHistory().snapshot(), 0.0, karoo, imperial = false,
+            liveElevation = 209.4, waitingForRide = false,
+        )
+        assertNull(f.hint)
+        assertEquals("209", f.currentText)
+        assertEquals("0", f.ascentText)
+    }
+
+    @Test
     fun `min label is dropped when it would overlap max`() {
         val s = ride(until = 3000.0) { 100.0 } // flat: min == max
         val f = HistoryGraphLayout.frame(480, 220, s, null, karoo, imperial = false)
