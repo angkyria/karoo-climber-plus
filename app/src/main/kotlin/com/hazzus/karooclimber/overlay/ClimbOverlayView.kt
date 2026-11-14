@@ -74,6 +74,14 @@ class ClimbOverlayView(context: Context) : View(context) {
 
     val panelSize: PanelSize get() = machine.size
 
+    /** The chip sits beside Workout+'s: a plain half-width chip, even in BOTTOM_SPLIT. */
+    var beside = false
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
+
     // ------------------------------------------------------------------ input
 
     private val gestureDetector = GestureDetector(
@@ -430,13 +438,15 @@ class ClimbOverlayView(context: Context) : View(context) {
     }
 
     private fun drawChip(canvas: Canvas, s: ClimbUiState.Shown) {
-        if (settings.chipAnchor == OverlayAnchor.BOTTOM_SPLIT) {
+        if (settings.chipAnchor == OverlayAnchor.BOTTOM_SPLIT && !beside) {
             drawSplitChips(canvas, s)
             return
         }
         val r = height / 2f
         canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), r, r, chipBgPaint)
-        chipTextPaint.textSize = height * CHIP_TEXT_FRACTION
+        // a window capped narrower than its content (beside Workout+'s chip): shrink to fit
+        val fit = (width.toFloat() / chipContentWidth(height).coerceAtLeast(1)).coerceAtMost(1f)
+        chipTextPaint.textSize = height * CHIP_TEXT_FRACTION * fit
         val baseline = height / 2f - (chipTextPaint.ascent() + chipTextPaint.descent()) / 2f
 
         when (val c = chipContent(s)) {

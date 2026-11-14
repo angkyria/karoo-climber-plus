@@ -80,6 +80,7 @@ class ClimberExtension : KarooExtension(EXTENSION_ID, BuildConfig.VERSION_NAME) 
         historyRepo = ElevationHistoryRepo(karooSystem)
         historyField = ElevationHistoryField(scope, historyRepo, settingsRepo.settings, imperial, historySource)
         overlay = OverlayController(this)
+        overlay.start()
 
         karooSystem.connect { connected ->
             Log.i(TAG, "Karoo system connected=$connected")
@@ -255,7 +256,7 @@ class ClimberExtension : KarooExtension(EXTENSION_ID, BuildConfig.VERSION_NAME) 
     }
 
     override fun onDestroy() {
-        overlay.hide()
+        overlay.stop()
         consumerIds.forEach { karooSystem.removeConsumer(it) }
         sysConsumers.values.forEach { karooSystem.removeConsumer(it) }
         navigationRepo.stop()

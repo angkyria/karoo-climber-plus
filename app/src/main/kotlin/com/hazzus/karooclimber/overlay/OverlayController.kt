@@ -10,6 +10,7 @@ import android.graphics.PixelFormat
 import android.provider.Settings as AndroidSettings
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
 import android.view.WindowManager
 import com.hazzus.karooclimber.ClimberExtension
 import com.hazzus.karooclimber.R
@@ -38,6 +39,21 @@ class OverlayController(private val service: ClimberExtension) {
     private var lastSettings: Settings? = null
     private var appliedParams: WindowManager.LayoutParams? = null
     private var lastHasActive = false
+
+    /** Workout+'s drawer / full page has the screen: ours stays, invisible and untouchable. */
+    private var yielded = false
+
+    /** Our chip shares the bottom edge with Workout+'s: it takes the left half. */
+    private var chipBeside = false
+
+    private val neighbor = NeighborLink(service) { lastSettings?.let(::relayout) }
+
+    fun start() = neighbor.start()
+
+    fun stop() {
+        hide()
+        neighbor.stop()
+    }
 
     val isShowing: Boolean get() = view != null
 
@@ -68,6 +84,7 @@ class OverlayController(private val service: ClimberExtension) {
             view = created
             // no relayout hook yet: the view is not attached to the window manager
             created.update(state, settings, imperial, sysValues)
+            coordinate(created, settings)
             val params = layoutParams(created, settings)
             windowManager.addView(created, params)
             appliedParams = params
@@ -92,6 +109,8 @@ class OverlayController(private val service: ClimberExtension) {
         }
         appliedParams = null
         lastHasActive = false
+        yielded = false
+        neighbor.publish(NeighborPanel.NONE, chipBottom = true)
         fieldsVisible.value = false
         service.stopForeground(Service.STOP_FOREGROUND_REMOVE)
     }
@@ -99,7 +118,7 @@ class OverlayController(private val service: ClimberExtension) {
     /** Recompute [fieldsVisible]; called on every show() tick and panel resize. */
     private fun refreshFieldsVisible() {
         fieldsVisible.value =
-            view?.panelSize == ViewModeMachine.PanelSize.FULL && lastHasActive
+            view?.panelSize == ViewModeMachine.PanelSize.FULL && lastHasActive && !yielded
     }
 
     /** Re-apply layout params (panel size switch, settings change). */
@@ -111,6 +130,7 @@ class OverlayController(private val service: ClimberExtension) {
 
     /** Relayouts through WindowManager are costly — skip when nothing changed. */
     private fun applyLayoutIfChanged(v: ClimbOverlayView, settings: Settings) {
+        coordinate(v, settings)
         val params = layoutParams(v, settings)
         val last = appliedParams
         if (last != null &&
@@ -125,6 +145,21 @@ class OverlayController(private val service: ClimberExtension) {
         appliedParams = params
     }
 
+    /** Settle with Workout+ (see [NeighborRules]) and tell it what we show. */
+    private fun coordinate(v: ClimbOverlayView, settings: Settings) {
+        val own = if (v.panelSize == ViewModeMachine.PanelSize.CHIP) NeighborPanel.CHIP else NeighborPanel.PANEL
+        val other = neighbor.otherNow()
+        // the priority is a Workout+ setting; unheard, the workout keeps the screen
+        val ownWins = (other.priority ?: OverlayPriority.WORKOUT) == OverlayPriority.CLIMBER
+        yielded = NeighborRules.yields(own, other.panel, ownWins)
+        val chipBottom = settings.chipAnchor != OverlayAnchor.TOP
+        neighbor.publish(if (yielded) NeighborPanel.NONE else own, chipBottom)
+        chipBeside = !yielded && NeighborRules.sideBySide(chipBottom, other)
+        v.beside = chipBeside
+        v.visibility = if (yielded) View.INVISIBLE else View.VISIBLE
+        refreshFieldsVisible()
+    }
+
     private fun layoutParams(v: ClimbOverlayView, settings: Settings): WindowManager.LayoutParams {
         val metrics = service.resources.displayMetrics
         val size = v.panelSize
@@ -133,14 +168,15 @@ class OverlayController(private val service: ClimberExtension) {
         when (size) {
             ViewModeMachine.PanelSize.CHIP -> {
                 height = (metrics.heightPixels * CHIP_HEIGHT_FRACTION).toInt()
-                width = if (settings.chipAnchor == OverlayAnchor.BOTTOM_SPLIT) {
+                width = if (settings.chipAnchor == OverlayAnchor.BOTTOM_SPLIT && !chipBeside) {
                     // full-width bar; the view draws the two edge chips itself
                     metrics.widthPixels
                 } else {
                     // size to the text inside; quantized so a ticking digit doesn't
                     // relayout the window every second
                     val minW = (metrics.widthPixels * CHIP_MIN_WIDTH_FRACTION).toInt()
-                    val maxW = (metrics.widthPixels * CHIP_MAX_WIDTH_FRACTION).toInt()
+                    // beside Workout+'s chip: half the edge, the view shrinks its text to fit
+                    val maxW = (metrics.widthPixels * (if (chipBeside) CHIP_BESIDE_WIDTH_FRACTION else CHIP_MAX_WIDTH_FRACTION)).toInt()
                     val step = (CHIP_WIDTH_STEP_DP * metrics.density).toInt().coerceAtLeast(1)
                     val content = v.chipContentWidth(height)
                     (((content + step - 1) / step) * step).coerceIn(minW, maxW)
@@ -159,7 +195,10 @@ class OverlayController(private val service: ClimberExtension) {
         // the chip stays non-focusable so hardware buttons keep their native actions;
         // bigger panels take key focus so the bottom-left button collapses them
         val focusFlag =
-            if (size == ViewModeMachine.PanelSize.CHIP) {
+            if (yielded) {
+                // hidden under Workout+: no keys, no touches
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            } else if (size == ViewModeMachine.PanelSize.CHIP) {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             } else {
                 0
@@ -176,8 +215,10 @@ class OverlayController(private val service: ClimberExtension) {
             // chip and drawer anchor independently; the full screen is always bottom.
             // BOTTOM_SPLIT positions like BOTTOM — only the in-window layout differs.
             val topAnchored = settings.anchorFor(size) == OverlayAnchor.TOP
-            gravity =
-                (if (topAnchored) Gravity.TOP else Gravity.BOTTOM) or Gravity.CENTER_HORIZONTAL
+            val beside = size == ViewModeMachine.PanelSize.CHIP && chipBeside
+            gravity = (if (topAnchored) Gravity.TOP else Gravity.BOTTOM) or
+                (if (beside) Gravity.LEFT else Gravity.CENTER_HORIZONTAL)
+            if (beside) x = (metrics.widthPixels * CHIP_BESIDE_EDGE_FRACTION).toInt()
             // top-anchored panels start below the Karoo status bar — the same
             // strip FULL keeps visible by stopping at 92%
             if (size != ViewModeMachine.PanelSize.FULL && topAnchored) {
@@ -241,6 +282,9 @@ class OverlayController(private val service: ClimberExtension) {
         private const val CHIP_WIDTH_STEP_DP = 8
         private const val CHIP_HEIGHT_FRACTION = 0.08
         private const val CHIP_EDGE_OFFSET_FRACTION = 0.03
+        // beside Workout+'s chip (right half): ours fills the left half, a gap between
+        private const val CHIP_BESIDE_WIDTH_FRACTION = 0.47
+        private const val CHIP_BESIDE_EDGE_FRACTION = 0.02
         private const val FULL_HEIGHT_FRACTION = 0.92
     }
 }

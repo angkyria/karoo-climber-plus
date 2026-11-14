@@ -75,6 +75,11 @@ Data flows one way: karoo-ext events → repos → pure engine → overlay windo
   bottom-left (KEYCODE_BACK) = shrink one step, the other three keys are replayed to
   Karoo OS via `PerformHardwareAction` (physical presses only — virtual ones would
   loop back into the focused overlay).
+- **Workout+ neighbor** (`overlay/Neighbor.kt`, `NeighborLink`): shares the screen
+  with Workout+ (com.angkyria.karooworkout) by broadcast — bottom chips side by side
+  (Climber+ left), a chip yields to the other's drawer / full page, two panels follow
+  Workout+'s priority setting (default: Workout+). Yielding keeps the window, invisible
+  and untouchable (the view owns the ViewModeMachine). Same file in Workout+ — keep in step.
 - **`settings/`** — DataStore-backed `SettingsRepo`; `ClimbField` enum doubles as
   climb-derived fields (no `dataTypeId`) and Karoo system stream fields (with one).
   Compose UI only in `SettingsActivity` — the overlay deliberately avoids Compose.
