@@ -199,10 +199,11 @@ class OverlayController(private val service: ClimberExtension) {
             ViewModeMachine.PanelSize.FULL -> {
                 // 92%: keep the Karoo status bar visible
                 width = metrics.widthPixels
-                // and above the navigation pill
-                height = minOf(
+                // and above the navigation pill: lifted by the gap, the top stays put
+                height = BottomEdge.panelHeightPx(
                     (metrics.heightPixels * FULL_HEIGHT_FRACTION).toInt(),
-                    metrics.heightPixels - BottomEdge.panelOffsetPx(navigating, metrics.density),
+                    navigating,
+                    metrics.density,
                 )
             }
         }
