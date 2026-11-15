@@ -86,6 +86,10 @@ class ClimberExtension : KarooExtension(EXTENSION_ID, BuildConfig.VERSION_NAME) 
             Log.i(TAG, "Karoo system connected=$connected")
         }
         navigationRepo.start()
+        // the ride app shrinks its pages for a pill at the bottom while it navigates
+        scope.launch {
+            navigationRepo.route.map { it != null }.distinctUntilChanged().collect { overlay.setNavigating(it) }
+        }
 
         consumerIds += karooSystem.addConsumer<RideState> { state ->
             val active = state is RideState.Recording || state is RideState.Paused

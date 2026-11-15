@@ -46,6 +46,9 @@ class OverlayController(private val service: ClimberExtension) {
     /** Our chip shares the bottom edge with Workout+'s: it takes the left half. */
     private var chipBeside = false
 
+    /** A route is navigated: the ride app's pill sits at the bottom, stay above it. */
+    private var navigating = false
+
     private val neighbor = NeighborLink(service) { lastSettings?.let(::relayout) }
 
     fun start() = neighbor.start()
@@ -121,6 +124,13 @@ class OverlayController(private val service: ClimberExtension) {
             view?.panelSize == ViewModeMachine.PanelSize.FULL && lastHasActive && !yielded
     }
 
+    /** The ride app started or stopped navigating (karoo-ext OnNavigationState). */
+    fun setNavigating(navigating: Boolean) {
+        if (this.navigating == navigating) return
+        this.navigating = navigating
+        lastSettings?.let(::relayout)
+    }
+
     /** Re-apply layout params (panel size switch, settings change). */
     fun relayout(settings: Settings) {
         val v = view ?: return
@@ -167,7 +177,7 @@ class OverlayController(private val service: ClimberExtension) {
         val height: Int
         when (size) {
             ViewModeMachine.PanelSize.CHIP -> {
-                height = (metrics.heightPixels * CHIP_HEIGHT_FRACTION).toInt()
+                height = BottomEdge.chipHeightPx(metrics.density)
                 width = if (settings.chipAnchor == OverlayAnchor.BOTTOM_SPLIT && !chipBeside) {
                     // full-width bar; the view draws the two edge chips itself
                     metrics.widthPixels
@@ -189,7 +199,11 @@ class OverlayController(private val service: ClimberExtension) {
             ViewModeMachine.PanelSize.FULL -> {
                 // 92%: keep the Karoo status bar visible
                 width = metrics.widthPixels
-                height = (metrics.heightPixels * FULL_HEIGHT_FRACTION).toInt()
+                // and above the navigation pill
+                height = minOf(
+                    (metrics.heightPixels * FULL_HEIGHT_FRACTION).toInt(),
+                    metrics.heightPixels - BottomEdge.panelOffsetPx(navigating, metrics.density),
+                )
             }
         }
         // the chip stays non-focusable so hardware buttons keep their native actions;
@@ -227,7 +241,9 @@ class OverlayController(private val service: ClimberExtension) {
             // keep the bottom chip clear of Karoo's native drawers / turn-by-turn
             // banner; at the top the status-bar inset is enough
             if (size == ViewModeMachine.PanelSize.CHIP && !topAnchored) {
-                y = (metrics.heightPixels * CHIP_EDGE_OFFSET_FRACTION).toInt()
+                y = BottomEdge.chipOffsetPx(navigating, metrics.density, metrics.heightPixels)
+            } else if (!topAnchored) {
+                y = BottomEdge.panelOffsetPx(navigating, metrics.density)
             }
             alpha = settings.opacityPercent / 100f
         }
@@ -280,8 +296,6 @@ class OverlayController(private val service: ClimberExtension) {
         private const val CHIP_MIN_WIDTH_FRACTION = 0.4
         private const val CHIP_MAX_WIDTH_FRACTION = 0.9
         private const val CHIP_WIDTH_STEP_DP = 8
-        private const val CHIP_HEIGHT_FRACTION = 0.08
-        private const val CHIP_EDGE_OFFSET_FRACTION = 0.03
         // beside Workout+'s chip (right half): ours fills the left half, a gap between
         private const val CHIP_BESIDE_WIDTH_FRACTION = 0.47
         private const val CHIP_BESIDE_EDGE_FRACTION = 0.02
