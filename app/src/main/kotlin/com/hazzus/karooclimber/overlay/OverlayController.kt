@@ -49,6 +49,9 @@ class OverlayController(private val service: ClimberExtension) {
     /** A route is navigated: the ride app's pill sits at the bottom, stay above it. */
     private var navigating = false
 
+    /** Our chip sits left of the ride app's navigation pill (set by [coordinate]). */
+    private var navSlot = false
+
     private val neighbor = NeighborLink(service) { lastSettings?.let(::relayout) }
 
     fun start() = neighbor.start()
@@ -165,7 +168,9 @@ class OverlayController(private val service: ClimberExtension) {
         val chipBottom = settings.chipAnchor != OverlayAnchor.TOP
         neighbor.publish(if (yielded) NeighborPanel.NONE else own, chipBottom)
         chipBeside = !yielded && NeighborRules.sideBySide(chipBottom, other)
-        v.beside = chipBeside
+        // navigating: the ride app's pill takes the middle of the strip, ours joins it on the left
+        navSlot = v.panelSize == ViewModeMachine.PanelSize.CHIP && navigating && chipBottom
+        v.beside = chipBeside || navSlot
         v.visibility = if (yielded) View.INVISIBLE else View.VISIBLE
         refreshFieldsVisible()
     }
@@ -178,7 +183,9 @@ class OverlayController(private val service: ClimberExtension) {
         when (size) {
             ViewModeMachine.PanelSize.CHIP -> {
                 height = BottomEdge.chipHeightPx(metrics.density)
-                width = if (settings.chipAnchor == OverlayAnchor.BOTTOM_SPLIT && !chipBeside) {
+                width = if (navSlot) {
+                    BottomEdge.navSlotWidthPx(metrics.widthPixels, metrics.density)
+                } else if (settings.chipAnchor == OverlayAnchor.BOTTOM_SPLIT && !chipBeside) {
                     // full-width bar; the view draws the two edge chips itself
                     metrics.widthPixels
                 } else {
@@ -232,8 +239,12 @@ class OverlayController(private val service: ClimberExtension) {
             val topAnchored = settings.anchorFor(size) == OverlayAnchor.TOP
             val beside = size == ViewModeMachine.PanelSize.CHIP && chipBeside
             gravity = (if (topAnchored) Gravity.TOP else Gravity.BOTTOM) or
-                (if (beside) Gravity.LEFT else Gravity.CENTER_HORIZONTAL)
-            if (beside) x = (metrics.widthPixels * CHIP_BESIDE_EDGE_FRACTION).toInt()
+                (if (beside || navSlot) Gravity.LEFT else Gravity.CENTER_HORIZONTAL)
+            if (navSlot) {
+                x = BottomEdge.slotEdgePx(metrics.density)
+            } else if (beside) {
+                x = (metrics.widthPixels * CHIP_BESIDE_EDGE_FRACTION).toInt()
+            }
             // top-anchored panels start below the Karoo status bar — the same
             // strip FULL keeps visible by stopping at 92%
             if (size != ViewModeMachine.PanelSize.FULL && topAnchored) {
@@ -242,7 +253,7 @@ class OverlayController(private val service: ClimberExtension) {
             // keep the bottom chip clear of Karoo's native drawers / turn-by-turn
             // banner; at the top the status-bar inset is enough
             if (size == ViewModeMachine.PanelSize.CHIP && !topAnchored) {
-                y = BottomEdge.chipOffsetPx(navigating, metrics.density, metrics.heightPixels)
+                y = BottomEdge.chipOffsetPx(metrics.heightPixels)
             } else if (!topAnchored) {
                 y = BottomEdge.panelOffsetPx(navigating, metrics.density)
             }
