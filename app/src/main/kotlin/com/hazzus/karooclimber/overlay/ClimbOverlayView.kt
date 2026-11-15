@@ -76,6 +76,9 @@ class ClimbOverlayView(context: Context) : View(context) {
 
     /** The chip sits beside Workout+'s: a plain half-width chip, even in BOTTOM_SPLIT. */
     var beside = false
+
+    /** Beside the ride app's navigation pill while navigating: a narrow slot, one value. */
+    var compactChip = false
         set(value) {
             if (field == value) return
             field = value
@@ -320,6 +323,7 @@ class ClimbOverlayView(context: Context) : View(context) {
     private val panelBgPaint = Paint().apply { color = Color.BLACK }
     private val approachBgPaint = Paint().apply { color = 0xFF383838.toInt() }
     private val chipBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xF0121212.toInt() }
+    private val pillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val fillPaint = Paint()
     private val rowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val cellPaint = Paint().apply { color = 0xFF1C1C1E.toInt() }
@@ -407,6 +411,17 @@ class ClimbOverlayView(context: Context) : View(context) {
 
     private fun chipContent(s: ClimbUiState.Shown): ChipContent {
         val active = s.active
+        if (compactChip) {
+            return ChipContent.Single(
+                ChipStyle.compactText(
+                    completed = s.completedCount,
+                    total = s.totalCount,
+                    toStart = active?.takeIf { it.distanceToStart > 0 }?.let { formatValue(it.distanceToStart) },
+                    grade = active?.takeIf { it.distanceToStart <= 0 }
+                        ?.let { currentGrade(s)?.let { g -> "%.0f%%".format(g) } ?: "--%" },
+                ),
+            )
+        }
         return when {
             active != null && active.distanceToStart <= 0 -> ChipContent.Row(
                 grade = currentGrade(s)?.let { "%.0f%%".format(it) } ?: "--%",
@@ -443,8 +458,17 @@ class ClimbOverlayView(context: Context) : View(context) {
             return
         }
         val r = height / 2f
-        canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), r, r, chipBgPaint)
-        // a window capped narrower than its content (beside Workout+'s chip): shrink to fit
+        // one solid pill like the navigation pill: the grade color on / ahead of a climb
+        val active = s.active
+        val grade = when {
+            active == null -> null
+            active.distanceToStart > 0 -> active.climb.avgGrade
+            else -> currentGrade(s) ?: active.climb.avgGrade
+        }
+        pillPaint.color = ChipStyle.background(grade, palette)
+        chipTextPaint.color = ChipStyle.textOn(pillPaint.color)
+        canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), r, r, pillPaint)
+        // a window capped narrower than its content (beside Workout+'s chip or the navigation pill): shrink to fit
         val fit = (width.toFloat() / chipContentWidth(height).coerceAtLeast(1)).coerceAtMost(1f)
         chipTextPaint.textSize = height * CHIP_TEXT_FRACTION * fit
         val baseline = height / 2f - (chipTextPaint.ascent() + chipTextPaint.descent()) / 2f
@@ -481,6 +505,7 @@ class ClimbOverlayView(context: Context) : View(context) {
         val chipW = width * SPLIT_CHIP_WIDTH_FRACTION
         val pad = h * SPLIT_CHIP_EDGE_PAD_FRACTION
         chipTextPaint.textSize = h * CHIP_TEXT_FRACTION
+        chipTextPaint.color = ChipStyle.TEXT_LIGHT
         val baseline = h / 2f - (chipTextPaint.ascent() + chipTextPaint.descent()) / 2f
         val active = s.active
 

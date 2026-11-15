@@ -171,6 +171,7 @@ class OverlayController(private val service: ClimberExtension) {
         // navigating: the ride app's pill takes the middle of the strip, ours joins it on the left
         navSlot = v.panelSize == ViewModeMachine.PanelSize.CHIP && navigating && chipBottom
         v.beside = chipBeside || navSlot
+        v.compactChip = navSlot
         v.visibility = if (yielded) View.INVISIBLE else View.VISIBLE
         refreshFieldsVisible()
     }
