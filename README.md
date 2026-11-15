@@ -75,6 +75,12 @@ Karoo's IBM Plex Sans Condensed font — but goes further where it counts:
   shows the steepest 100 m chunk it covers, so short ramps stay visible on long
   rides. Current elevation and ascent sit on top, with min/max labels and a
   distance grid when the field is big enough. Works with or without a route
+- **Shares the screen with [Workout+](https://github.com/angkyria/karoo-workout-plus)**
+  (0.1.8): with both apps running, the two bottom chips sit side by side
+  (Climber+ left, Workout+ right) instead of overlapping, and a chip steps
+  aside while the other app's drawer or full page is open. When both want a
+  drawer or full page, the *Overlay priority* setting in Workout+ picks which
+  one stays
 
 ### Gestures
 
